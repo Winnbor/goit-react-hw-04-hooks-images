@@ -1,4 +1,4 @@
-import { Component } from 'react';
+import { useState, useEffect } from 'react';
 import { ToastContainer } from 'react-toastify';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -14,60 +14,58 @@ import './App.css';
 
 import { fetchQuery } from '../services/api';
 
-class App extends Component {
-  state = {
-    query: '',
-    queryResult: null,
-    elements: [],
-    page: 1,
-    error: null,
-    status: 'idle',
-    loaderStatus: '',
-    showModal: false,
-    largeImage: '',
-    alt: '',
-  };
+function App() {
+  const [query, setQuery] = useState('');
+  const [queryResult, setQueryResult] = useState(null);
+  const [elements, setElements] = useState([]);
+  const [page, setPage] = useState(1);
+  const [error, setError] = useState(null);
+  const [status, setStatus] = useState('idle');
+  const [loaderStatus, setLoaderStatus] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [largeImage, setLargeImage] = useState({ src: '', alt: '' });
 
-  componentDidUpdate(prevProps, prevState) {
-    if (prevState.query !== this.state.query) {
-      this.setState({ loaderStatus: 'pending' });
-
-      fetchQuery(this.state.query, this.state.page)
-        .then(queryResult => {
-          if (queryResult.hits.length === 0) {
-            toast.error('Ooh! Nothing was found for your query');
-            this.setState({
-              status: 'idle',
-              loaderStatus: '',
-            });
-          } else {
-            this.setState({
-              queryResult,
-              status: 'resolved',
-              loaderStatus: '',
-              elements: queryResult.hits,
-            });
-          }
-        })
-        .catch(error =>
-          this.setState({ error, status: 'rejected', loaderStatus: '' }),
-        );
+  useEffect(() => {
+    if (query === '') {
+      return;
     }
 
-    if (prevState.page !== this.state.page && this.state.page !== 1) {
-      fetchQuery(this.state.query, this.state.page)
-        .then(queryResult => {
-          this.setState(prevState => ({
-            queryResult,
-            status: 'resolved',
-            loaderStatus: '',
+    setLoaderStatus('pending');
 
-            elements: [...prevState.elements, ...queryResult.hits],
-          }));
+    fetchQuery(query)
+      .then(queryResult => {
+        if (queryResult.hits.length === 0) {
+          toast.error('Ooh! Nothing was found for your query');
+          setStatus('idle');
+          setLoaderStatus('');
+        } else {
+          setQueryResult(queryResult);
+          setElements(queryResult.hits);
+          setStatus('resolved');
+          setLoaderStatus('');
+        }
+      })
+      .catch(error => {
+        setError(error);
+        setStatus('rejected');
+        setLoaderStatus('');
+      });
+  }, [query]);
+
+  useEffect(() => {
+    if (page !== 1) {
+      fetchQuery(query, page)
+        .then(queryResult => {
+          setQueryResult(queryResult);
+          setElements(prevState => [...prevState, ...queryResult.hits]);
+          setStatus('resolved');
+          setLoaderStatus('');
         })
-        .catch(error =>
-          this.setState({ error, status: 'rejected', loaderStatus: '' }),
-        )
+        .catch(error => {
+          setError(error);
+          setStatus('rejected');
+          setLoaderStatus('');
+        })
         .finally(() => {
           window.scrollTo({
             top: document.documentElement.scrollHeight,
@@ -75,85 +73,67 @@ class App extends Component {
           });
         });
     }
-  }
+  }, [query, page]);
 
-  handleLoadMore = () => {
-    this.setState(prevState => ({
-      loaderStatus: 'pending',
-      page: prevState.page + 1,
-    }));
+  const handleLoadMore = () => {
+    setLoaderStatus('pending');
+    setPage(prevState => prevState + 1);
   };
 
-  toggleModal = () => {
-    this.setState(({ showModal }) => ({
-      showModal: !showModal,
-    }));
+  const toggleModal = () => {
+    setShowModal(!showModal);
   };
 
-  handleLargeImage = (src, alt) => {
-    this.toggleModal();
-    this.setState({ largeImage: src, alt });
+  const handleLargeImage = (src, alt) => {
+    toggleModal();
+    setLargeImage({ src, alt });
   };
 
-  handleFormSubmit = query => {
-    this.setState({ query, page: 1 });
+  const handleFormSubmit = query => {
+    setQuery(query);
+    setPage(1);
   };
 
-  render() {
-    const {
-      queryResult,
-      elements,
-      error,
-      status,
-      loaderStatus,
-      showModal,
-      largeImage,
-      alt,
-    } = this.state;
+  return (
+    <>
+      <Container>
+        <Searchbar onFormSubmit={handleFormSubmit} />
+        {showModal && (
+          <Modal onCloseModal={toggleModal}>
+            <button type="button" className="Modal-btn" onClick={toggleModal}>
+              X
+            </button>
+            <img
+              src={largeImage.src}
+              alt={largeImage.alt}
+              className="Large-image"
+            />
+          </Modal>
+        )}
 
-    return (
-      <>
-        <Container>
-          <Searchbar onFormSubmit={this.handleFormSubmit} />
-          {showModal && (
-            <Modal onCloseModal={this.toggleModal}>
-              <button
-                type="button"
-                className="Modal-btn"
-                onClick={this.toggleModal}
-              >
-                X
-              </button>
-              <img src={largeImage} alt={alt} className="Large-image" />
-            </Modal>
-          )}
+        {status === 'idle' && <p>Type in your query</p>}
 
-          {status === 'idle' && <p>Type in your query</p>}
+        {loaderStatus === 'pending' && (
+          <div className="Loader">
+            <Loader type="ThreeDots" color="#fa5b2b" height={80} width={80} />
+          </div>
+        )}
 
-          {loaderStatus === 'pending' && (
-            <div className="Loader">
-              <Loader type="ThreeDots" color="#fa5b2b" height={80} width={80} />
-            </div>
-          )}
+        {status === 'rejected' && { error }}
 
-          {status === 'rejected' && { error }}
-
-          {status === 'resolved' && (
-            <>
-              <ImageGallery
-                elements={elements}
-                handleLargeImage={this.handleLargeImage}
-              />
-              {queryResult.hits.length > 0 && (
-                <Button onClick={this.handleLoadMore} />
-              )}
-            </>
-          )}
-        </Container>
-        <ToastContainer position="top-right" autoClose={3000} />
-      </>
-    );
-  }
+        {status === 'resolved' && (
+          <>
+            <ImageGallery
+              elements={elements}
+              handleLargeImage={handleLargeImage}
+            />
+            {queryResult.hits.length > 0 && <Button onClick={handleLoadMore} />}
+          </>
+        )}
+      </Container>
+      <ToastContainer position="top-right" autoClose={3000} />
+    </>
+  );
 }
 
 export default App;
